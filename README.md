@@ -17,6 +17,7 @@ This Speech-to-Text API utilizes OpenAI's Whisper model to transcribe spoken lan
 
 ### To Do
 - [x] Implement asynchronous processing for handling multiple requests.
+- [ ] Add database instead of a local queue
 - [ ] Add support for more languages and dialects.
 - [ ] Enhance error handling and logging.
 
