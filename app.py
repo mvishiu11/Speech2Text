@@ -7,6 +7,7 @@ import glob
 import threading
 import queue
 import uuid
+import asyncio
 
 app = Flask(__name__)
 
@@ -46,7 +47,7 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
         return False
 
 
-def translate_speech(file_path, task_id):
+async def translate_speech(file_path, task_id):
     """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
 
     Args:
@@ -55,6 +56,7 @@ def translate_speech(file_path, task_id):
     """
     try:
         model = whisper.load_model("base")
+        asyncio.run(model.transcribe(file_path))
         result = model.transcribe(file_path)
         tasks[task_id]['status'] = 'finished'
         tasks[task_id]['result'] = result['text']
@@ -164,4 +166,6 @@ if __name__ == '__main__':
         os.makedirs("uploads")
     if not os.path.exists("runs"):
         os.makedirs("runs")    
+    if not os.path.exists("whisper_model"):
+        os.makedirs("whisper_model")
     app.run(debug=True) # Remove debug=True when deploying to production
