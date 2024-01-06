@@ -72,7 +72,7 @@ Replace `path_to_audio_file.wav` with the path to your audio file. The return fo
 
 ## Asynchronous Processing
 
-The Speech-to-Text API handles audio file translations asynchronously, providing a more efficient way to manage multiple translation requests. This is particularly beneficial when dealing with a high volume of requests or large audio files.
+The Speech-to-Text API uses a queue which processes translation requests made asynchronously, thus providing a more efficient way to manage multiple translation requests. This is particularly beneficial when dealing with a high volume of requests or large audio files. The queue is currently implemented using Pythons in-built `queue` type, and it is defined locally in the `app.py` file. The queue is limited to 3 concurrent translation tasks for ease of testing, but this limit will be made configurable in the future. Due to this implementation, there are some extra steps involved in using the API, which are described below. I know it may seem like an overkill, but trust me it has a purpose.
 
 ### Submitting Translation Requests
 
