@@ -44,7 +44,7 @@ conda activate speech-to-text-api
 
 3. Install the required Python packages:
 ```bash
-   pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Using the Application
