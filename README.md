@@ -35,7 +35,7 @@ To set up the application:
 An example using conda:
 - Create the environment:
 ```bash
-conda create -n speech-to-text-api python=3.8
+conda create -n speech-to-text-api python
 ```
 - Activate the environment:
 ```bash
