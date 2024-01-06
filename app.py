@@ -59,7 +59,8 @@ def translate_speech(file_path, task_id):
         tasks[task_id]['status'] = 'finished'
         tasks[task_id]['result'] = result['text']
         file_name = file_path.split("/")[-1].split(".")[0] + ".txt"
-        with open(f"runs\{file_name}", "w") as file:
+        print(f"Saved translation run to runs\{file_name}")
+        with open(f"runs\\{file_name}", "w") as file:
             file.write(result['text'])
         dir_size_adjust("runs")
     except Exception as e:
