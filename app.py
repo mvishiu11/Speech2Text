@@ -26,6 +26,9 @@ def translate_speech(file_path, task_id):
         result = model.transcribe(file_path)
         tasks[task_id]['status'] = 'finished'
         tasks[task_id]['result'] = result['text']
+        file_name = file_path.split("/")[-1].split(".")[0] + ".txt"
+        with open(f"runs\{file_name}", "w") as file:
+            file.write(result['text'])
     except Exception as e:
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['result'] = str(e)
@@ -63,6 +66,8 @@ def translate():
         return jsonify({"error": "No file part"}), 400
     if task_queue.full():
         return jsonify({"error": "Queue limit reached"}), 429
+    
+    print(f"Received request from {request.remote_addr} with {request.files['file'].filename} file.")
 
     file = request.files['file']
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -123,4 +128,7 @@ def result(task_id):
 if __name__ == '__main__':
     if not os.path.exists("uploads"):
         os.makedirs("uploads")
+    if not os.path.exists("runs"):
+        os.makedirs("runs")    
+    
     app.run(debug=True) # Remove debug=True when deploying to production

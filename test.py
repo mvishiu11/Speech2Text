@@ -37,7 +37,7 @@ def test_translation(file_path):
     text = get_response.json()["text"]
 
     # Step 3: Save the transcribed file to /runs folder
-    file_name = file_path.split("\\")[-1].split(".")[0] + ".txt"
+    file_name = file_path.split("\\")[-1].split(".")[0] + "_test" + ".txt"
     print(file_name)
     with open(f"runs\{file_name}", "w") as file:
         file.write(text)

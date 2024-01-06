@@ -48,7 +48,7 @@ def test_translation(file_paths):
         i += 1
         text = check_translation_status(task_id)
         if text:
-            file_name = file_path.split("\\")[-1].split(".")[0] + f"_{i}" + ".txt"
+            file_name = file_path.split("\\")[-1].split(".")[0] + f"_{i}" + "_test" + ".txt"
             print(file_name)
             with open(f"runs\{file_name}", "w") as file:
                 file.write(text)
