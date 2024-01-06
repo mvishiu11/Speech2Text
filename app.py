@@ -15,6 +15,12 @@ task_queue = queue.Queue(maxsize=3)
 tasks = {}
 
 def translate_speech(file_path, task_id):
+    """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
+
+    Args:
+        file_path (str): Path to the audio file.
+        task_id (str): Unique ID of the task.
+    """
     try:
         model = whisper.load_model("base")
         result = model.transcribe(file_path)
@@ -25,8 +31,10 @@ def translate_speech(file_path, task_id):
         tasks[task_id]['result'] = str(e)
 
 def task_processor():
+    """_summary_: Processes tasks from the task queue."""
     while True:
         task_id, file_path = task_queue.get()
+        tasks[task_id]['status'] = 'running'
         translate_speech(file_path, task_id)
 
 # Start the task processor in a separate thread
@@ -35,6 +43,22 @@ thread.start()
 
 @app.route('/translate', methods=['POST'])
 def translate():
+    """_summary_: Endpoint for uploading an audio file and translating it to text.
+
+    HTTP Request Args:
+        file (file): Audio file to be translated.
+        
+    HTTP status codes cheatsheet:
+        202: Task accepted.
+        400: Bad request.
+        404: Task ID not found.
+        429: Too many requests.
+        500: Internal server error.
+    
+    Returns:
+        JSON: JSON object containing the task ID.
+        int: HTTP status code.
+    """
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
     if task_queue.full():
@@ -55,6 +79,21 @@ def translate():
 
 @app.route('/status/<task_id>', methods=['GET'])
 def status(task_id):
+    """_summary_: Endpoint for checking the status of a task.
+
+    Possible task statuses:
+        pending: Task has been accepted and is waiting to be processed.
+        running: Task is being processed.
+        finished: Task has been processed successfully.
+        failed: Task failed to be processed.
+    
+    Args:
+        task_id (str): Unique ID of the task.
+
+    Returns:
+        JSON: JSON object containing the status of the task.
+        int: HTTP status code (optional, 404 if task ID is invalid)
+    """
     if task_id in tasks:
         return jsonify(tasks[task_id])
     else:
@@ -62,6 +101,15 @@ def status(task_id):
     
 @app.route('/result/<task_id>', methods=['GET'])
 def result(task_id):
+    """_summary_: Endpoint for getting the result of a task.
+
+    Args:
+        task_id (str): Unique ID of the task.
+
+    Returns:
+        JSON: JSON object containing the result of the task.
+        int: HTTP status code (optional, 404 if task ID is invalid)
+    """
     if task_id in tasks:
         if tasks[task_id]['status'] == 'finished':
             return jsonify({"text": tasks[task_id]['result']})
@@ -73,4 +121,4 @@ def result(task_id):
         return jsonify({"error": "Invalid task ID"}), 404
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True) # Remove debug=True when deploying to production
