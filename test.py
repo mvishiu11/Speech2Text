@@ -1,5 +1,6 @@
 import requests
 import time
+import os
 
 # URL of the Flask app
 BASE_URL = "http://127.0.0.1:5000"
@@ -43,6 +44,8 @@ def test_translation(file_path):
     
     
 if __name__ == "__main__":
+    if not os.path.exists("runs"):
+        os.makedirs("runs")
     test_translation("examples\\example_eng_1.wav")
     time.sleep(5)  # Wait for the task to complete
     print("Done!")

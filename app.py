@@ -121,4 +121,6 @@ def result(task_id):
         return jsonify({"error": "Invalid task ID"}), 404
 
 if __name__ == '__main__':
+    if not os.path.exists("uploads"):
+        os.makedirs("uploads")
     app.run(debug=True) # Remove debug=True when deploying to production
