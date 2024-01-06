@@ -19,7 +19,7 @@ def test_translation(file_path):
             return
     elif not (200 <= response.status_code < 300):
         print(f"Failed to submit file for translation. Status Code: {response.status_code}")
-        print(response.json())
+        print(response)
         return
     
     # Step 2: Get a result of the translation using a GET requests to the /status and /result endpoints
@@ -43,6 +43,6 @@ def test_translation(file_path):
     
     
 if __name__ == "__main__":
-    test_translation("examples\example_eng_1.wav")
+    test_translation("examples\\example_eng_1.wav")
     time.sleep(5)  # Wait for the task to complete
     print("Done!")
