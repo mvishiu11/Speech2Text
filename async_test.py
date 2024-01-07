@@ -2,7 +2,7 @@ import requests
 import time
 
 # URL of the Flask app
-BASE_URL = "http://127.0.0.1:5000"
+BASE_URL = "http://127.0.0.1:8000"
 
 def send_translation_request(file_path):
     with open(file_path, 'rb') as file:
