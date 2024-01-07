@@ -17,6 +17,8 @@ This Speech-to-Text API utilizes OpenAI's Whisper model to transcribe spoken lan
 
 ### To Do
 - [x] Implement asynchronous processing for handling multiple requests.
+- [x] Add Docker support.
+- [X] Use FastAPI instead of Flask.
 - [ ] Add database instead of a local queue
 - [ ] Add support for more languages and dialects.
 - [ ] Enhance error handling and logging.
@@ -52,15 +54,15 @@ pip install -r requirements.txt
 To run the Flask app, execute the following command:
 
 ```bash
-python app.py
+uvicorn app:app --reload
 ```
 
-The application will start on `http://127.0.0.1:5000`. It listens for POST requests to the `/translate` endpoint. To use it, send a POST request with an audio file in ``.wav` format. The file should be included in the request's body as form-data. 
+The application will start on `http://127.0.0.1:8000`. It listens for POST requests to the `/translate` endpoint. To use it, send a POST request with an audio file in ``.wav` format. The file should be included in the request's body as form-data. 
 
 Example of a POST request using curl:
 
 ```bash
-curl -X POST -F "file=@/path/to/audio/file.wav" http://127.0.0.1:5000/translate
+curl -X POST -F "file=@/path/to/audio/file.wav" http://127.0.0.1:8000/translate
 ```
 
 Replace `path_to_audio_file.wav` with the path to your audio file. The return format is JSON, and the response will contain the task ID of the translation task:
@@ -82,7 +84,7 @@ When a POST request is sent to the `/translate` endpoint with an audio file, the
 Example of submitting a translation request using `curl`:
 
 ```bash
-curl -X POST -F "file=@/path/to/audio/file.wav" http://127.0.0.1:5000/translate
+curl -X POST -F "file=@/path/to/audio/file.wav" http://127.0.0.1:8000/translate
 ```
 
 The response will contain the task ID of the translation task as mentioned in the section above:
@@ -156,10 +158,10 @@ docker build -t speech-to-text-api .
 To run the container, execute the following command:
 
 ```bash
-docker run -p 5000:5000 speech-to-text-api
+docker run -p 8000:8000 speech-to-text-api
 ```
 
-The application will start on `http://127.0.0.1:5000`. You can now send POST requests to the `/translate` endpoint.
+The application will start on `http://127.0.0.1:8000`. You can now send POST requests to the `/translate` endpoint.
 
 ## Example Usage
 
