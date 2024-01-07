@@ -1,21 +1,22 @@
-from flask import Flask, request, jsonify
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
 import whisper
 import datetime
 import os
 import glob
-import threading
+import asyncio
 import queue
 import uuid
+import shutil
 
-
-app = Flask(__name__)
+# Create FastAPI app
+app = FastAPI()
 
 # Queue for tasks
 task_queue = queue.Queue(maxsize=3)
 
 # Dictionary to store task status
 tasks = {}
-
 def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
     """_summary_: Adjusts the number of files in the directory to 10 by deleting the oldest files.
 
@@ -24,18 +25,21 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
         num_files (int, optional): Number of files to keep. Defaults to 10.
         size_limit (int, optional): Maximum size of the directory in bytes. Defaults to 100000000.
     """
-    files = glob.glob(f"{dir_path}*")
+    files = glob.glob(f"{dir_path}\*")
+    print(files)
     try:
         if len(files) > num_files:
             files.sort(key=os.path.getmtime)
             for i in range(len(files) - 10):
                 os.remove(files[i])
+            files = glob.glob(f"{dir_path}\*")
             files.sort(key=os.path.getmtime, reverse=True)
             return True
         if sum(os.path.getsize(f) for f in files) > size_limit:
             files.sort(key=os.path.getmtime)
             while sum(os.path.getsize(f) for f in files) > size_limit:
                 os.remove(files[0])
+            files = glob.glob(f"{dir_path}\*")
             files.sort(key=os.path.getmtime, reverse=True)
             return True
         else:
@@ -65,21 +69,19 @@ def translate_speech(file_path, task_id):
         dir_size_adjust("runs")
     except Exception as e:
         tasks[task_id]['status'] = 'failed'
-        tasks[task_id]['result'] = str(e)
+        tasks[task_id]['result'] = str(e)# Other helper functions (dir_size_adjust, translate_speech) remain the same
 
-def task_processor():
-    """_summary_: Processes tasks from the task queue."""
+async def task_processor():
     while True:
-        task_id, file_path = task_queue.get()
+        task_id, file_path = await asyncio.to_thread(task_queue.get)
         tasks[task_id]['status'] = 'running'
         translate_speech(file_path, task_id)
 
-# Start the task processor in a separate thread
-thread = threading.Thread(target=task_processor, daemon=True)
-thread.start()
+# Start the task processor in an asyncio event loop
+asyncio.create_task(task_processor())
 
-@app.route('/translate', methods=['POST'])
-def translate():
+@app.post("/translate")
+async def translate(file: UploadFile = File(...)):
     """_summary_: Endpoint for uploading an audio file and translating it to text.
 
     HTTP Request Args:
@@ -96,28 +98,26 @@ def translate():
         JSON: JSON object containing the task ID.
         int: HTTP status code.
     """
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
     if task_queue.full():
-        return jsonify({"error": "Queue limit reached"}), 429
+        raise HTTPException(status_code=429, detail="Queue limit reached")
     
-    print(f"Received request from {request.remote_addr} with {request.files['file'].filename} file.")
-
-    file = request.files['file']
-    timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    file_extension = os.path.splitext(file.filename)[1]
-    filename = f"upload-{timestamp}{file_extension}"
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
+    filename = f"upload-{timestamp}-{file.filename}"
     file_path = os.path.join("uploads/", filename)
-    file.save(file_path)
+
+    # Save the uploaded file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
     dir_size_adjust("uploads")
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'status': 'pending', 'result': None}
     task_queue.put((task_id, file_path))
 
-    return jsonify({"task_id": task_id}), 202
+    return {"task_id": task_id}
 
-@app.route('/status/<task_id>', methods=['GET'])
-def status(task_id):
+@app.get("/status/{task_id}")
+async def status(task_id: str):
     """_summary_: Endpoint for checking the status of a task.
 
     Possible task statuses:
@@ -133,13 +133,13 @@ def status(task_id):
         JSON: JSON object containing the status of the task.
         int: HTTP status code (optional, 404 if task ID is invalid)
     """
-    if task_id in tasks:
-        return jsonify(tasks[task_id])
-    else:
-        return jsonify({"error": "Invalid task ID"}), 404
-    
-@app.route('/result/<task_id>', methods=['GET'])
-def result(task_id):
+    task = tasks.get(task_id)
+    if task:
+        return task
+    raise HTTPException(status_code=404, detail="Invalid task ID")
+
+@app.get("/result/{task_id}")
+async def result(task_id: str):
     """_summary_: Endpoint for getting the result of a task.
 
     Args:
@@ -149,21 +149,13 @@ def result(task_id):
         JSON: JSON object containing the result of the task.
         int: HTTP status code (optional, 404 if task ID is invalid)
     """
-    if task_id in tasks:
-        if tasks[task_id]['status'] == 'finished':
-            return jsonify({"text": tasks[task_id]['result']})
-        elif tasks[task_id]['status'] == 'failed':
-            return jsonify({"error": tasks[task_id]['result']}), 500
-        else:
-            return jsonify({"error": "Task has not finished yet"}), 400
+    task = tasks.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Invalid task ID")
+    
+    if task['status'] == 'finished':
+        return {"text": task['result']}
+    elif task['status'] == 'failed':
+        raise HTTPException(status_code=500, detail=task['result'])
     else:
-        return jsonify({"error": "Invalid task ID"}), 404
-
-if __name__ == '__main__':
-    if not os.path.exists("uploads"):
-        os.makedirs("uploads")
-    if not os.path.exists("runs"):
-        os.makedirs("runs")    
-    if not os.path.exists("whisper_model"):
-        os.makedirs("whisper_model")
-    app.run(debug=True) # Remove debug=True when deploying to production
+        raise HTTPException(status_code=400, detail="Task has not finished yet")

@@ -3,7 +3,7 @@ import time
 import os
 
 # URL of the Flask app
-BASE_URL = "http://127.0.0.1:5000"
+BASE_URL = "http://127.0.0.1:8000"
 
 def test_translation(file_path):
     # Step 1: Send a POST request to the /translate endpoint
