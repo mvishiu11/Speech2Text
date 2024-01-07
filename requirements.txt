@@ -2,3 +2,4 @@ openai-whisper
 fastapi
 uvicorn
 ffmpeg
+python-multipart
