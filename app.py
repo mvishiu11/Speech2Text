@@ -26,7 +26,6 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
         size_limit (int, optional): Maximum size of the directory in bytes. Defaults to 100000000.
     """
     files = glob.glob(f"{dir_path}\*")
-    print(files)
     try:
         if len(files) > num_files:
             files.sort(key=os.path.getmtime)
