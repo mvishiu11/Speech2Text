@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-from regex import P
 import whisper
 import datetime
 import os
