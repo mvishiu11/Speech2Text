@@ -7,3 +7,6 @@ uploads/*
 # But keep the folders runs and uploads
 !/runs/
 !/uploads/
+
+# Ignore pycache
+__pycache__/
