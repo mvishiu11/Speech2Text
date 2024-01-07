@@ -25,7 +25,7 @@ This Speech-to-Text API utilizes OpenAI's Whisper model to transcribe spoken lan
 
 To use the Speech-to-Text API, you need the following:
 
-- Python 3.8 or higher
+- Python 3.11.5 (other versions might work as well, but were not tested)
 - FFmpeg (for audio processing)
 
 To set up the application:
@@ -35,7 +35,7 @@ To set up the application:
 An example using conda:
 - Create the environment:
 ```bash
-conda create -n speech-to-text-api python=3.8
+conda create -n speech-to-text-api python=3.11.5
 ```
 - Activate the environment:
 ```bash
@@ -44,7 +44,7 @@ conda activate speech-to-text-api
 
 3. Install the required Python packages:
 ```bash
-   pip install -r requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Using the Application
