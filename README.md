@@ -1,5 +1,5 @@
 # Speech-to-Text API with Whisper 
-![Version](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-CC_BY_NC_SA_4.0-blue) ![Python](https://img.shields.io/badge/python-3.11.5-blue) ![FFmpeg](https://img.shields.io/badge/ffmpeg-4.4-blue) ![FastAPI](https://img.shields.io/badge/fastapi-0.70.0-blue) ![Pydantic](https://img.shields.io/badge/pydantic-1.8.2-blue) ![Uvicorn](https://img.shields.io/badge/uvicorn-0.15.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-orange) ![License](https://img.shields.io/badge/license-CC_BY_NC_SA_4.0-green) ![Python](https://img.shields.io/badge/python-3.11.5-darkblue) ![FFmpeg](https://img.shields.io/badge/ffmpeg-6.1.1-black) ![FastAPI](https://img.shields.io/badge/fastapi-0.108.0-blue) ![Uvicorn](https://img.shields.io/badge/uvicorn-0.21.1-yellow)
 
 
 ## Table of Contents
