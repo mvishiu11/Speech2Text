@@ -9,6 +9,19 @@ import queue
 import uuid
 import shutil
 from typing import List
+import warnings
+
+# Save the original warning handler
+original_showwarning = warnings.showwarning
+
+# Custom warning handler to suppress the warning about FP16 not being supported on CPU
+def custom_warning_handler(message, category, filename, lineno, file=None, line=None):
+    whisper_message = "FP16 is not supported on CPU; using FP32 instead"
+    if issubclass(category, UserWarning) and whisper_message in str(message):
+        print("Running on CPU. FP16 not supported, using FP32 instead.")
+    else:
+        warnings.showwarning = original_showwarning
+        warnings.showwarning(message, category, filename, lineno, file, line)
 
 # Create FastAPI app
 app = FastAPI()
@@ -79,8 +92,12 @@ def translate_speech(file_path, task_id):
         task_id (str): Unique ID of the task.
     """
     try:
-        model = whisper.load_model("base")
-        result = model.transcribe(file_path)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            warnings.showwarning = custom_warning_handler
+            model = whisper.load_model("base")
+            result = model.transcribe(file_path)
+            warnings.showwarning = original_showwarning
         tasks[task_id]['status'] = 'finished'
         tasks[task_id]['result'] = result['text']
         file_name = os.path.normpath(file_path).split(os.sep)[-1].split(".")[0] + ".txt"
@@ -91,7 +108,7 @@ def translate_speech(file_path, task_id):
         dir_size_adjust("runs")
     except Exception as e:
         tasks[task_id]['status'] = 'failed'
-        tasks[task_id]['result'] = str(e)# Other helper functions (dir_size_adjust, translate_speech) remain the same
+        tasks[task_id]['result'] = str(e)
 
 async def task_processor():
     while True:
