@@ -1,4 +1,5 @@
-# Speech-to-Text API with Whisper
+# Speech-to-Text API with Whisper ![Version](https://img.shields.io/badge/version-1.0.0-blue) ![License](https://img.shields.io/badge/license-CC_BY_NC_SA_4.0-blue) ![Python](https://img.shields.io/badge/python-3.11.5-blue) ![FFmpeg](https://img.shields.io/badge/ffmpeg-4.4-blue) ![FastAPI](https://img.shields.io/badge/fastapi-0.70.0-blue) ![Pydantic](https://img.shields.io/badge/pydantic-1.8.2-blue) ![Uvicorn](https://img.shields.io/badge/uvicorn-0.15.0-blue)
+
 
 ## Table of Contents
 
@@ -188,5 +189,5 @@ Contributions to the project are welcome. Please follow the standard fork-and-pu
 
 ## License
 
-This project is licensed under the terms of the [MIT License](LICENSE).
+This project is licensed under the terms of the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License](LICENSE).
 This might change in the future.
