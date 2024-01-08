@@ -40,6 +40,8 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
             files.sort(key=os.path.getmtime)
             while sum(os.path.getsize(f) for f in files) > size_limit:
                 os.remove(files[0])
+                print(f"Removed file {files[0]}")
+                files = glob.glob(f"{dir_path}\*")
             files = glob.glob(f"{dir_path}\*")
             files.sort(key=os.path.getmtime, reverse=True)
             return True
@@ -58,15 +60,13 @@ def dict_size_adjust(dict, num_items=10):
         num_items (int, optional): Number of items to keep. Defaults to 10.
     """
     try:
+        keys = list(dict.keys())
+        keys.sort(key=lambda x: dict[x]['timestamp'])
         if len(dict) > num_items:
-            keys = list(dict.keys())
-            keys.sort(key=lambda x: dict[x]['timestamp'])
             for i in range(len(dict) - num_items):
                 del dict[keys[i]]
             return True
         else:
-            keys = list(dict.keys())
-            keys.sort(key=lambda x: dict[x]['timestamp'])
             return True
     except Exception as e:
         print(e)
@@ -117,8 +117,7 @@ async def translate(file: UploadFile = File(...)):
         500: Internal server error. Ergo something is wrong with this app.py file.
     
     Returns:
-        JSON: JSON object containing the task ID.
-        int: HTTP status code.
+        JSON: JSON object containing the task ID and the status code.
     """
     if task_queue.full():
         raise HTTPException(status_code=429, detail="Queue limit reached")
@@ -130,7 +129,10 @@ async def translate(file: UploadFile = File(...)):
     # Save the uploaded file
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
+        buffer.flush()
+        os.fsync(buffer.fileno())
+        
+    print(f"Saved uploaded file to {file_path}")
     dir_size_adjust("uploads")
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
@@ -158,7 +160,6 @@ async def status(task_id: str):
 
     Returns:
         JSON: JSON object containing the status of the task.
-        int: HTTP status code (optional, 404 if task ID is invalid)
     """
     task = tasks.get(task_id)
     if task:
@@ -181,9 +182,9 @@ async def result(task_id: str):
         raise HTTPException(status_code=404, detail="Invalid task ID")
     
     if task['status'] == 'finished':
-        return {"text": task['result']}
+        return JSONResponse(content={"text": task['result']}, status_code=200)
     elif task['status'] == 'failed':
-        raise HTTPException(status_code=500, detail=task['result'])
+        return JSONResponse(content={"error": task['result']}, status_code=400)
     else:
         raise HTTPException(status_code=400, detail="Task has not finished yet")
     
