@@ -21,7 +21,11 @@ This Speech-to-Text API utilizes OpenAI's Whisper model to transcribe spoken lan
 - [X] Use FastAPI instead of Flask.
 - [ ] Add database instead of a local queue
 - [ ] Add support for more languages and dialects.
-- [ ] Enhance error handling and logging.
+- [1/3] Enhance error handling and logging.
+- [ ] Add support for more audio formats.
+- [ ] Add support for streaming audio.
+- [ ] Add support for audio files with multiple speakers.
+- [ ] Switch to a more flexible model selection system, probably via Deepgram.
 
 ## Requirements and Setup
 
@@ -51,13 +55,20 @@ pip install -r requirements.txt
 
 ## Using the Application
 
-To run the Flask app, execute the following command:
+To run the FastAPI server, execute the following command:
 
 ```bash
-uvicorn app:app --reload
+python run.py [--debug] [--port <port_num>] [--host <host_address>] [--noreload]
 ```
 
-The application will start on `http://127.0.0.1:8000`. It listens for POST requests to the `/translate` endpoint. To use it, send a POST request with an audio file in ``.wav` format. The file should be included in the request's body as form-data. 
+Possible arguments are:
+- `--debug` - run the server in DEBUG mode, which allows for logging DEBUG level content
+- `--port <port_num>` - specify the port on which the server will run, default is `8000`, must be an integer s. t. `0 < port_num < 65536`
+- `--noreload` - disable auto-reload of the server, default is `False`, currently this will not allow you to disable the server with Ctrl+C, this will be fixed in the future
+- `--host <host_address>` - specify the host address on which the server will run, default is `127.0.0.1`, which is the local server, if you do not know what this means, do not change it, as `run.py` does not currenlty handle errors causeed by invalid host addresses
+
+
+This runs the provided `run.py` script which serves the API via `uvicorn` and does several other things, like setting logger levels. The application will start on `http://127.0.0.1:8000` unless you specified a custom port with `--host`. It listens for POST requests to the `/translate` endpoint. To use it, send a POST request with an audio file in ``.wav` format. The file should be included in the request's body as form-data. 
 
 Example of a POST request using curl:
 
