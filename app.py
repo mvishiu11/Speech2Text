@@ -58,7 +58,6 @@ def dict_size_adjust(dict, num_items=10):
         num_items (int, optional): Number of items to keep. Defaults to 10.
     """
     try:
-        print(f"Comparing dict size {len(dict)} to {num_items}")
         if len(dict) > num_items:
             keys = list(dict.keys())
             keys.sort(key=lambda x: dict[x]['timestamp'])
@@ -142,7 +141,7 @@ async def translate(file: UploadFile = File(...)):
         print("Failed to adjust tasks dictionary size")
         raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
 
-    return {"task_id": task_id}
+    return JSONResponse(content={"task_id": task_id}, status_code=202)
 
 @app.get("/status/{task_id}")
 async def status(task_id: str):
@@ -163,7 +162,7 @@ async def status(task_id: str):
     """
     task = tasks.get(task_id)
     if task:
-        return task
+        return JSONResponse(content={"status": task['status']})
     raise HTTPException(status_code=404, detail="Invalid task ID")
 
 @app.get("/result/{task_id}")
@@ -191,14 +190,13 @@ async def result(task_id: str):
     
 @app.get("/tasks")
 async def get_tasks(fields: List[str] = Query(None, description="List of fields to be returned", example=["status", "result"])
-                    , limit: int = Query(10, description="Maximum number of tasks to be returned", example=10)
-                    , size: int = Query(0, description="Whether to return the size of the tasks dictionary", example=0)):
+                  , limit: int = Query(10, description="Maximum number of tasks to be returned", example=10)
+                  , size: int = Query(0, description="Whether to return the size of the tasks dictionary", example=0)):
     """_summary_: Endpoint for getting all tasks. Logs requests to the server console.
 
     Returns:
         JSON: JSON object containing all tasks.
     """
-    print(f"GET request to /tasks/ with fields={fields}")
     if size==1:
         return {"size": len(tasks)}
     if fields:
@@ -208,6 +206,12 @@ async def get_tasks(fields: List[str] = Query(None, description="List of fields 
                 output[list(tasks.keys())[i]] = {field: tasks[list(tasks.keys())[i]][field] for field in fields}
             except IndexError:
                 break
-        return output
+        return JSONResponse(content=output)
     else:
-        return tasks
+        output = {}
+        for i in range(limit):
+            try:
+                output[list(tasks.keys())[i]] = tasks[list(tasks.keys())[i]]
+            except IndexError:
+                break
+        return JSONResponse(content=output)
