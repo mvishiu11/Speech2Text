@@ -138,7 +138,7 @@ async def translate(file: UploadFile = File(...)):
     tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
     
     await asyncio.to_thread(task_queue.put, (task_id, file_path))
-    size_adjusted = dict_size_adjust(tasks, 2)
+    size_adjusted = dict_size_adjust(tasks)
     if not size_adjusted:
         print("Failed to adjust tasks dictionary size")
         raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
