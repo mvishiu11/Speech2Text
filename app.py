@@ -10,6 +10,11 @@ import uuid
 import shutil
 from typing import List
 import warnings
+import logging
+
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Save the original warning handler
 original_showwarning = warnings.showwarning
@@ -18,7 +23,7 @@ original_showwarning = warnings.showwarning
 def custom_warning_handler(message, category, filename, lineno, file=None, line=None):
     whisper_message = "FP16 is not supported on CPU; using FP32 instead"
     if issubclass(category, UserWarning) and whisper_message in str(message):
-        print("Running on CPU. FP16 not supported, using FP32 instead.")
+        logger.warning("Running on CPU. FP16 not supported, using FP32 instead.")
     else:
         warnings.showwarning = original_showwarning
         warnings.showwarning(message, category, filename, lineno, file, line)
@@ -53,16 +58,20 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
             files.sort(key=os.path.getmtime)
             while sum(os.path.getsize(f) for f in files) > size_limit:
                 os.remove(files[0])
-                print(f"Removed file {files[0]}")
+                logger.info(f"Removed file {files[0]}")
                 files = glob.glob(os.path.join(dir_path, "*"))
             files.sort(key=os.path.getmtime, reverse=True)
             return True
         else:
             files.sort(key=os.path.getmtime, reverse=True)
             return True
+    except FileNotFoundError:
+        logger.error(f"Directory not found: {dir_path}", exc_info=True)
+    except PermissionError:
+        logger.error(f"Permission denied for directory: {dir_path}", exc_info=True)
     except Exception as e:
-        print(e)
-        return False
+        logger.error("An unexpected error occurred in dir_size_adjust", exc_info=True)
+    return False
 
 def dict_size_adjust(dict, num_items=10):
     """_summary_: Adjusts the number of items in the dictionary to 10 by deleting the oldest items.
@@ -76,12 +85,13 @@ def dict_size_adjust(dict, num_items=10):
         keys.sort(key=lambda x: dict[x]['timestamp'])
         if len(dict) > num_items:
             for i in range(len(dict) - num_items):
+                logger.info(f"Removed task {keys[i]}")
                 del dict[keys[i]]
             return True
         else:
             return True
     except Exception as e:
-        print(e)
+        logger.error(f"An unexpected error occurred in dict_size_adjust: {e}", exc_info=True)
         return False
 
 def translate_speech(file_path, task_id):
@@ -104,17 +114,31 @@ def translate_speech(file_path, task_id):
         save_path = os.path.join("runs", file_name)
         with open(save_path, "w") as file:
             file.write(result['text'])
-        print(f"Saved translation run to {save_path}")
+        logger.info(f"Saved translation run to {save_path}")
         dir_size_adjust("runs")
-    except Exception as e:
+    except FileNotFoundError:
+        logger.error(f"File not found: {file_path}", exc_info=True)
         tasks[task_id]['status'] = 'failed'
-        tasks[task_id]['result'] = str(e)
+        tasks[task_id]['result'] = 'File not found'
+    except IOError as e:
+        logger.error(f"IO error: {e}", exc_info=True)
+        tasks[task_id]['status'] = 'failed'
+        tasks[task_id]['result'] = f'IO error occurred: {e}'
+    except Exception as e:
+        logger.error("An unexpected error occurred", exc_info=True)
+        tasks[task_id]['status'] = 'failed'
+        tasks[task_id]['result'] = f'An unexpected error occurred: {e}'
 
 async def task_processor():
     while True:
-        task_id, file_path = await asyncio.to_thread(task_queue.get)
-        tasks[task_id]['status'] = 'running'
-        translate_speech(file_path, task_id)
+        try:
+            task_id, file_path = await asyncio.to_thread(task_queue.get)
+            tasks[task_id]['status'] = 'running'
+            translate_speech(file_path, task_id)
+        except Exception as e:
+            logger.error("Error in task processing", exc_info=True)
+            tasks[task_id]['status'] = 'failed'
+            tasks[task_id]['result'] = str(e)
 
 # Start the task processor in an asyncio event loop
 asyncio.create_task(task_processor())
@@ -149,7 +173,7 @@ async def translate(file: UploadFile = File(...)):
         buffer.flush()
         os.fsync(buffer.fileno())
         
-    print(f"Saved uploaded file to {file_path}")
+    logger.info(f"Saved uploaded file to {file_path}")
     dir_size_adjust("uploads")
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
@@ -157,7 +181,7 @@ async def translate(file: UploadFile = File(...)):
     await asyncio.to_thread(task_queue.put, (task_id, file_path))
     size_adjusted = dict_size_adjust(tasks)
     if not size_adjusted:
-        print("Failed to adjust tasks dictionary size")
+        logger.error("Failed to adjust tasks dictionary size", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
 
     return JSONResponse(content={"task_id": task_id}, status_code=202)
