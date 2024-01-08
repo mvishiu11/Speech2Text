@@ -46,6 +46,5 @@ def test_translation(file_path):
 if __name__ == "__main__":
     if not os.path.exists("runs"):
         os.makedirs("runs")
-    test_translation("examples\\example_eng_1.wav")
-    time.sleep(5)  # Wait for the task to complete
+    test_translation(os.path.join("examples", "example_eng_1.wav"))
     print("Done!")

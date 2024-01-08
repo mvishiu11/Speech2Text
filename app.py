@@ -27,13 +27,13 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
         num_files (int, optional): Number of files to keep. Defaults to 10.
         size_limit (int, optional): Maximum size of the directory in bytes. Defaults to 100000000.
     """
-    files = glob.glob(f"{dir_path}\*")
+    files = glob.glob(os.path.join(dir_path, "*"))
     try:
         if len(files) > num_files:
             files.sort(key=os.path.getmtime)
             for i in range(len(files) - 10):
                 os.remove(files[i])
-            files = glob.glob(f"{dir_path}\*")
+            files = glob.glob(os.path.join(dir_path, "*"))
             files.sort(key=os.path.getmtime, reverse=True)
             return True
         if sum(os.path.getsize(f) for f in files) > size_limit:
@@ -41,8 +41,7 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
             while sum(os.path.getsize(f) for f in files) > size_limit:
                 os.remove(files[0])
                 print(f"Removed file {files[0]}")
-                files = glob.glob(f"{dir_path}\*")
-            files = glob.glob(f"{dir_path}\*")
+                files = glob.glob(os.path.join(dir_path, "*"))
             files.sort(key=os.path.getmtime, reverse=True)
             return True
         else:
@@ -84,10 +83,11 @@ def translate_speech(file_path, task_id):
         result = model.transcribe(file_path)
         tasks[task_id]['status'] = 'finished'
         tasks[task_id]['result'] = result['text']
-        file_name = file_path.split("/")[-1].split(".")[0] + ".txt"
-        print(f"Saved translation run to runs\{file_name}")
-        with open(f"runs\\{file_name}", "w") as file:
+        file_name = os.path.normpath(file_path).split(os.sep)[-1].split(".")[0] + ".txt"
+        save_path = os.path.join("runs", file_name)
+        with open(save_path, "w") as file:
             file.write(result['text'])
+        print(f"Saved translation run to {save_path}")
         dir_size_adjust("runs")
     except Exception as e:
         tasks[task_id]['status'] = 'failed'
@@ -124,7 +124,7 @@ async def translate(file: UploadFile = File(...)):
     
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
     filename = f"upload-{timestamp}-{file.filename}"
-    file_path = os.path.join("uploads/", filename)
+    file_path = os.path.join("uploads", filename)
 
     # Save the uploaded file
     with open(file_path, "wb") as buffer:
