@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
 import whisper
 import datetime
@@ -8,6 +8,7 @@ import asyncio
 import queue
 import uuid
 import shutil
+from typing import List
 
 # Create FastAPI app
 app = FastAPI()
@@ -17,6 +18,7 @@ task_queue = queue.Queue(maxsize=3)
 
 # Dictionary to store task status
 tasks = {}
+
 def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
     """_summary_: Adjusts the number of files in the directory to 10 by deleting the oldest files.
 
@@ -48,6 +50,28 @@ def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
         print(e)
         return False
 
+def dict_size_adjust(dict, num_items=10):
+    """_summary_: Adjusts the number of items in the dictionary to 10 by deleting the oldest items.
+
+    Args:
+        dict (dict): Dictionary to be adjusted.
+        num_items (int, optional): Number of items to keep. Defaults to 10.
+    """
+    try:
+        print(f"Comparing dict size {len(dict)} to {num_items}")
+        if len(dict) > num_items:
+            keys = list(dict.keys())
+            keys.sort(key=lambda x: dict[x]['timestamp'])
+            for i in range(len(dict) - num_items):
+                del dict[keys[i]]
+            return True
+        else:
+            keys = list(dict.keys())
+            keys.sort(key=lambda x: dict[x]['timestamp'])
+            return True
+    except Exception as e:
+        print(e)
+        return False
 
 def translate_speech(file_path, task_id):
     """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
@@ -110,8 +134,13 @@ async def translate(file: UploadFile = File(...)):
     
     dir_size_adjust("uploads")
     task_id = str(uuid.uuid4())
-    tasks[task_id] = {'status': 'pending', 'result': None}
-    task_queue.put((task_id, file_path))
+    tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
+    
+    await asyncio.to_thread(task_queue.put, (task_id, file_path))
+    size_adjusted = dict_size_adjust(tasks, 2)
+    if not size_adjusted:
+        print("Failed to adjust tasks dictionary size")
+        raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
 
     return {"task_id": task_id}
 
@@ -158,3 +187,27 @@ async def result(task_id: str):
         raise HTTPException(status_code=500, detail=task['result'])
     else:
         raise HTTPException(status_code=400, detail="Task has not finished yet")
+    
+    
+@app.get("/tasks")
+async def get_tasks(fields: List[str] = Query(None, description="List of fields to be returned", example=["status", "result"])
+                    , limit: int = Query(10, description="Maximum number of tasks to be returned", example=10)
+                    , size: int = Query(0, description="Whether to return the size of the tasks dictionary", example=0)):
+    """_summary_: Endpoint for getting all tasks. Logs requests to the server console.
+
+    Returns:
+        JSON: JSON object containing all tasks.
+    """
+    print(f"GET request to /tasks/ with fields={fields}")
+    if size==1:
+        return {"size": len(tasks)}
+    if fields:
+        output = {}
+        for i in range(limit):
+            try:
+                output[list(tasks.keys())[i]] = {field: tasks[list(tasks.keys())[i]][field] for field in fields}
+            except IndexError:
+                break
+        return output
+    else:
+        return tasks
