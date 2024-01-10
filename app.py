@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 import whisper
 import datetime
@@ -11,6 +11,9 @@ import shutil
 from typing import List
 import warnings
 import logging
+import soundfile as sf
+import io
+import tempfile
 
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
 logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -257,3 +260,38 @@ async def get_tasks(fields: List[str] = Query(None, description="List of fields 
             except IndexError:
                 break
         return JSONResponse(content=output)
+    
+    
+@app.websocket("/ws/translate")
+async def websocket_translate(websocket: WebSocket, required_chunk_size_in_bytes: int = 16000):
+    await websocket.accept()
+    buffer = io.BytesIO()
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
+
+    try:
+        while True:
+            audio_chunk = await websocket.receive_bytes()
+            buffer.write(audio_chunk)
+
+            # Check if buffer has enough data to process (e.g., 5 seconds of audio)
+            if buffer.tell() >= required_chunk_size_in_bytes:
+                buffer.seek(0)
+                # Process the audio chunk
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                    # Assuming the audio is in WAV format
+                    sf.write(temp_file, buffer.getvalue(), samplerate=16000)
+                    translate_speech(temp_file.name, task_id)
+                    tasks[task_id]['status'] = 'running'
+                    buffer.seek(0)
+                    buffer.truncate()
+                
+                # Send the result back
+                await websocket.send_json({"task_id": task_id, "result": tasks[task_id]['result']})
+
+    except WebSocketDisconnect:
+        print(f"WebSocket disconnected, task_id: {task_id}")
+        # Handle cleanup here
+
+    finally:
+        buffer.close()
