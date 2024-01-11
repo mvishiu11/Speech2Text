@@ -8,6 +8,7 @@
 - [Requirements and Setup](#requirements-and-setup)
 - [Using the Application](#using-the-application)
 - [Asynchronous Processing](#asynchronous-processing)
+- [Webscoket](#websocket)
 - [Dockerization](#dockerization)
 - [Example Usage](#example-usage)
 - [Contributing](#contributing)
@@ -159,6 +160,27 @@ The API is designed to handle a maximum of 3 concurrent translation tasks. If a 
 ### Local Queue Definition
 
 Be warned that the queue is defined locally, so if the application is running on multiple machines, the queue will not be shared between them. This means that if a POST request is made to one machine, and then another POST request is made to a different machine, the second request will not be added to the queue. This is a limitation of the current implementation, and it will be addressed in the future. Additionally, the queue is not persistent, so if the application is restarted, the queue will be cleared.
+
+## Websocket
+
+The Speech-to-Text API also supports Websocket connections. To use it, send a POST request to the `/translate_ws` endpoint with an audio file in `.wav` format. The file should be included in the request's body as form-data.
+
+Example of a POST request using curl:
+
+```bash
+curl -X POST -F "file=@/path/to/audio/file.wav" http://
+```
+
+Replace `path_to_audio_file.wav` with the path to your audio file. The return format is JSON, and the response will contain the task ID of the translation task:
+
+```json
+    {
+    "task_id": "b2f7e7e0-9f9b-4e4e-8f4a-9b9b9b9b9b9b"
+    }
+```
+
+This feature is not yet extensively tested and thus is only available in the `experimental` branch. It will be merged into the `main` branch once it is fully tested and stable.
+
 
 ## Dockerization
 
