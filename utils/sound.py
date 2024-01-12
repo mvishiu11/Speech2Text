@@ -22,10 +22,10 @@ def is_chunk_ready(buffer: bytearray,
         required_bytes = bytes
         return buffer.tell() >= required_bytes
     
-    if not byte_mode and bytes:
+    if not byte_mode and bytes and bytes != 16000:
         raise ValueError("'bytes' argument is not applicable in non-byte mode")
     
-    if byte_mode and seconds:
+    if byte_mode and seconds and seconds != 20:
         raise ValueError("'seconds' argument is not applicable in byte mode")
     
     if not buffer:
