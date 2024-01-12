@@ -1,5 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from traitlets import default
 import whisper
 import datetime
 import os
@@ -11,22 +12,27 @@ import shutil
 from typing import List
 import warnings
 import logging
-
-log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+import soundfile as sf
+import io
+import tempfile
+from utils.operations import dir_size_adjust, dict_size_adjust
+from utils.sound import is_chunk_ready
 
 # Save the original warning handler
 original_showwarning = warnings.showwarning
 
 # Custom warning handler to suppress the warning about FP16 not being supported on CPU
-def custom_warning_handler(message, category, filename, lineno, file=None, line=None):
+def whisper_warning_handler(message, category, filename, lineno, file=None, line=None, logger = logging.getLogger(__name__)):
     whisper_message = "FP16 is not supported on CPU; using FP32 instead"
     if issubclass(category, UserWarning) and whisper_message in str(message):
         logger.warning("Running on CPU. FP16 not supported, using FP32 instead.")
     else:
         warnings.showwarning = original_showwarning
         warnings.showwarning(message, category, filename, lineno, file, line)
+
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI()
@@ -36,63 +42,6 @@ task_queue = queue.Queue(maxsize=3)
 
 # Dictionary to store task status
 tasks = {}
-
-def dir_size_adjust(dir_path, num_files=10, size_limit = 100000000):
-    """_summary_: Adjusts the number of files in the directory to 10 by deleting the oldest files.
-
-    Args:
-        file_path (str): Path to the directory.
-        num_files (int, optional): Number of files to keep. Defaults to 10.
-        size_limit (int, optional): Maximum size of the directory in bytes. Defaults to 100000000.
-    """
-    files = glob.glob(os.path.join(dir_path, "*"))
-    try:
-        if len(files) > num_files:
-            files.sort(key=os.path.getmtime)
-            for i in range(len(files) - 10):
-                os.remove(files[i])
-            files = glob.glob(os.path.join(dir_path, "*"))
-            files.sort(key=os.path.getmtime, reverse=True)
-            return True
-        if sum(os.path.getsize(f) for f in files) > size_limit:
-            files.sort(key=os.path.getmtime)
-            while sum(os.path.getsize(f) for f in files) > size_limit:
-                os.remove(files[0])
-                logger.info(f"Removed file {files[0]}")
-                files = glob.glob(os.path.join(dir_path, "*"))
-            files.sort(key=os.path.getmtime, reverse=True)
-            return True
-        else:
-            files.sort(key=os.path.getmtime, reverse=True)
-            return True
-    except FileNotFoundError:
-        logger.error(f"Directory not found: {dir_path}", exc_info=True)
-    except PermissionError:
-        logger.error(f"Permission denied for directory: {dir_path}", exc_info=True)
-    except Exception as e:
-        logger.error("An unexpected error occurred in dir_size_adjust", exc_info=True)
-    return False
-
-def dict_size_adjust(dict, num_items=10):
-    """_summary_: Adjusts the number of items in the dictionary to 10 by deleting the oldest items.
-
-    Args:
-        dict (dict): Dictionary to be adjusted.
-        num_items (int, optional): Number of items to keep. Defaults to 10.
-    """
-    try:
-        keys = list(dict.keys())
-        keys.sort(key=lambda x: dict[x]['timestamp'])
-        if len(dict) > num_items:
-            for i in range(len(dict) - num_items):
-                logger.info(f"Removed task {keys[i]}")
-                del dict[keys[i]]
-            return True
-        else:
-            return True
-    except Exception as e:
-        logger.error(f"An unexpected error occurred in dict_size_adjust: {e}", exc_info=True)
-        return False
 
 def translate_speech(file_path, task_id):
     """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
@@ -104,7 +53,7 @@ def translate_speech(file_path, task_id):
     try:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            warnings.showwarning = custom_warning_handler
+            warnings.showwarning = whisper_warning_handler
             model = whisper.load_model("base")
             result = model.transcribe(file_path)
             warnings.showwarning = original_showwarning
@@ -115,7 +64,7 @@ def translate_speech(file_path, task_id):
         with open(save_path, "w") as file:
             file.write(result['text'])
         logger.info(f"Saved translation run to {save_path}")
-        dir_size_adjust("runs")
+        dir_size_adjust("runs", logger=logger)
     except FileNotFoundError:
         logger.error(f"File not found: {file_path}", exc_info=True)
         tasks[task_id]['status'] = 'failed'
@@ -174,12 +123,12 @@ async def translate(file: UploadFile = File(...)):
         os.fsync(buffer.fileno())
         
     logger.info(f"Saved uploaded file to {file_path}")
-    dir_size_adjust("uploads")
+    dir_size_adjust("uploads", logger=logger)
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
     
     await asyncio.to_thread(task_queue.put, (task_id, file_path))
-    size_adjusted = dict_size_adjust(tasks)
+    size_adjusted = dict_size_adjust(tasks, logger=logger)
     if not size_adjusted:
         logger.error("Failed to adjust tasks dictionary size", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
@@ -257,3 +206,63 @@ async def get_tasks(fields: List[str] = Query(None, description="List of fields 
             except IndexError:
                 break
         return JSONResponse(content=output)
+    
+    
+@app.websocket("/ws/translate")
+async def websocket_translate(websocket: WebSocket, 
+                              seconds: int = Query(20, description="Number of seconds of audio to be processed", example=20)):
+    await websocket.accept()
+    buffer = io.BytesIO()
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
+    logger.info(f"WebSocket connection accepted: Task ID {task_id}")
+
+    async def process(buffer, task_id):
+        try:
+            buffer.seek(0)
+            # Process the audio chunk
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                sf.write(temp_file, buffer.getvalue(), samplerate=16000)
+                translate_speech(temp_file.name, task_id)
+                tasks[task_id]['status'] = 'running'
+                buffer.seek(0)
+                buffer.truncate()
+            logger.info(f"Audio chunk processed: Task ID {task_id}")
+        except Exception as e:
+            logger.error(f"Error in processing audio chunk: Task ID {task_id}", exc_info=True)
+            tasks[task_id]['status'] = 'failed'
+            tasks[task_id]['result'] = str(e)
+            await websocket.send_json({"task_id": task_id, "error": str(e)})  # Send error back
+
+    # if seconds and bytes:
+    #     if(bytes == 16000): 
+    #         bytes_flag = False 
+    #     logger.error("Both 'seconds' and 'bytes' cannot be specified at the same time")
+    #     raise HTTPException(status_code=400, detail="Both 'seconds' and 'bytes' arguments cannot be specified at the same time")
+
+    try:
+        while True:
+            audio_chunk = await websocket.receive_bytes()
+            buffer.write(audio_chunk)
+            logger.info(f"Received audio chunk: Task ID {task_id}")
+
+            if seconds and is_chunk_ready(buffer, seconds=seconds):
+                await process(buffer, task_id)
+                await websocket.send_json({"task_id": task_id, "result": tasks[task_id]['result'], "status": "ready_for_next_chunk"})
+                
+            # elif bytes and is_chunk_ready(buffer, byte_mode=True, bytes=bytes):
+            #     await process(buffer, task_id)
+            #     await websocket.send_json({"task_id": task_id, "result": tasks[task_id]['result'], "status": "ready_for_next_chunk"})
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected: Task ID {task_id}")
+        buffer.close()
+
+    except Exception as e:
+        logger.error(f"Unexpected error in WebSocket endpoint: Task ID {task_id}", exc_info=True)
+        buffer.close()
+        raise
+
+    finally:
+        logger.info(f"Closing WebSocket connection: Task ID {task_id}")
+        buffer.close()
