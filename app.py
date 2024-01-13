@@ -271,22 +271,24 @@ async def websocket_translate(websocket: WebSocket,
 async def websocket_test(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection accepted")
-    
-    buffer = io.BytesIO()
+
     task_id = str(uuid.uuid4())
+    is_connected = True
 
     try:
         while True:
             audio_chunk = await websocket.receive_bytes()
             logger.info(f"Received audio chunk: {len(audio_chunk)} bytes")
             logger.info(f"Audio chunk processed: Task ID {task_id}")
-            await websocket.send_json(JSONResponse({"status": "received", "task_id": task_id}, 202))
+            await websocket.send_json({"status": "received", "task_id": task_id})
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected due to unknow error")
+        is_connected = False
+        logger.info("WebSocket disconnected due to unknown error")
     except Exception as e:
-        websocket.close()
         logger.error("Unexpected error in WebSocket endpoint", exc_info=True)
         raise e
     finally:
-        websocket.close()
+        if is_connected:
+            await websocket.close()
+            is_connected = False
         logger.info("Closing WebSocket connection by user request")
