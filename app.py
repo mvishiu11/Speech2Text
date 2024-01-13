@@ -279,15 +279,14 @@ async def websocket_test(websocket: WebSocket):
         while True:
             audio_chunk = await websocket.receive_bytes()
             logger.info(f"Received audio chunk: {len(audio_chunk)} bytes")
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                sf.write(temp_file, buffer.getvalue(), samplerate=16000)
-                logger.info(f"Audio chunk processed: Task ID {task_id}")
+            logger.info(f"Audio chunk processed: Task ID {task_id}")
             await websocket.send_json(JSONResponse({"status": "received", "task_id": task_id}, 202))
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected")
+        logger.info("WebSocket disconnected due to unknow error")
     except Exception as e:
+        websocket.close()
         logger.error("Unexpected error in WebSocket endpoint", exc_info=True)
         raise e
     finally:
         websocket.close()
-        logger.info("Closing WebSocket connection")
+        logger.info("Closing WebSocket connection by user request")
