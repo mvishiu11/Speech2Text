@@ -1,6 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
-from traitlets import default
 import whisper
 import datetime
 import os
@@ -266,3 +265,23 @@ async def websocket_translate(websocket: WebSocket,
     finally:
         logger.info(f"Closing WebSocket connection: Task ID {task_id}")
         buffer.close()
+      
+       
+@app.websocket("/ws/test")
+async def websocket_test(websocket: WebSocket):
+    await websocket.accept()
+    logger.info("WebSocket connection accepted")
+
+    try:
+        while True:
+            audio_chunk = await websocket.receive_bytes()
+            logger.info(f"Received audio chunk: {len(audio_chunk)} bytes")
+            await websocket.send_json({"status": "received"})
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
+    except Exception as e:
+        logger.error("Unexpected error in WebSocket endpoint", exc_info=True)
+        raise e
+    finally:
+        websocket.close()
+        logger.info("Closing WebSocket connection")

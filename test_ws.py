@@ -4,7 +4,7 @@ import asyncio
 
 
 async def test_websocket():
-    uri = "ws://localhost:8000/ws/translate"
+    uri = "ws://localhost:8000/ws/test"
     async with websockets.connect(uri) as websocket:
         for i in range(5):
             fake_audio_chunk = os.urandom(1024)
