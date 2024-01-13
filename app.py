@@ -271,12 +271,18 @@ async def websocket_translate(websocket: WebSocket,
 async def websocket_test(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection accepted")
+    
+    buffer = io.BytesIO()
+    task_id = str(uuid.uuid4())
 
     try:
         while True:
             audio_chunk = await websocket.receive_bytes()
             logger.info(f"Received audio chunk: {len(audio_chunk)} bytes")
-            await websocket.send_json({"status": "received"})
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+                sf.write(temp_file, buffer.getvalue(), samplerate=16000)
+                logger.info(f"Audio chunk processed: Task ID {task_id}")
+            await websocket.send_json(JSONResponse({"status": "received", "task_id": task_id}, 202))
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
     except Exception as e:
