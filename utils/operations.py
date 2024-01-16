@@ -86,3 +86,15 @@ def save_temp_file(audio_data: bytes, file_extension: str = 'wav') -> str:
         file.write(audio_data)
 
     return temp_file_path
+
+def get_file_extension(file_path: str) -> str:
+    """
+    Get the file extension of a file.
+
+    Args:
+    file_path (str): The path to the file.
+
+    Returns:
+    str: The file extension.
+    """
+    return os.path.splitext(file_path)[1][1:].strip().lower()
