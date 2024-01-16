@@ -6,6 +6,7 @@ import os
 BASE_URL = "http://127.0.0.1:" + os.environ.get("PORT", "8000")
 
 def test_translation(file_path):
+    print(f"Sending a POST request to {BASE_URL}/translate...")
     # Step 1: Send a POST request to the /translate endpoint
     with open(file_path, 'rb') as file:
         response = requests.post(f"{BASE_URL}/translate", files={'file': file})
@@ -44,7 +45,5 @@ def test_translation(file_path):
     
     
 if __name__ == "__main__":
-    if not os.path.exists("runs"):
-        os.makedirs("runs")
     test_translation(os.path.join("examples", "example_eng_1.wav"))
     print("Done!")
