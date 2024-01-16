@@ -1,9 +1,11 @@
+from email.mime import audio
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+import inspect
 import whisper
 import datetime
 import os
-import glob
 import asyncio
 import queue
 import uuid
@@ -11,11 +13,9 @@ import shutil
 from typing import List
 import warnings
 import logging
-import soundfile as sf
-import io
-import tempfile
 from utils.operations import dir_size_adjust, dict_size_adjust
-from utils.sound import is_chunk_ready
+from utils.sound import is_chunk_ready, bytes_to_wav, resample_audio
+from utils.logger import CustomFormatter
 
 # Save the original warning handler
 original_showwarning = warnings.showwarning
@@ -29,9 +29,14 @@ def whisper_warning_handler(message, category, filename, lineno, file=None, line
         warnings.showwarning = original_showwarning
         warnings.showwarning(message, category, filename, lineno, file, line)
 
+# Logger setup
 log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
-logging.basicConfig(level=log_level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
+ch = logging.StreamHandler()
+ch.setLevel(log_level)
+ch.setFormatter(CustomFormatter())
+logger.addHandler(ch)
 
 # Create FastAPI app
 app = FastAPI()
@@ -41,6 +46,15 @@ task_queue = queue.Queue(maxsize=3)
 
 # Dictionary to store task status
 tasks = {}
+
+# Json with audio settings
+class AudioSettings(BaseModel):
+    sample_rate: int = 16000
+    bit_depth: int = 16
+    channels: int = 1
+    seconds: int = 20
+    byte_mode: bool = False
+    bytes: int = 16000
 
 def translate_speech(file_path, task_id):
     """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
@@ -56,6 +70,7 @@ def translate_speech(file_path, task_id):
             model = whisper.load_model("base")
             result = model.transcribe(file_path)
             warnings.showwarning = original_showwarning
+            
         tasks[task_id]['status'] = 'finished'
         tasks[task_id]['result'] = result['text']
         file_name = os.path.normpath(file_path).split(os.sep)[-1].split(".")[0] + ".txt"
@@ -64,18 +79,31 @@ def translate_speech(file_path, task_id):
             file.write(result['text'])
         logger.info(f"Saved translation run to {save_path}")
         dir_size_adjust("runs", logger=logger)
+        
     except FileNotFoundError:
-        logger.error(f"File not found: {file_path}", exc_info=True)
+        logger.error(f"[{inspect.currentframe().f_code.co_name}] File not found: {file_path}", exc_info=True)
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['result'] = 'File not found'
     except IOError as e:
-        logger.error(f"IO error: {e}", exc_info=True)
+        logger.error(f"[{inspect.currentframe().f_code.co_name}] IO error occured: {e}", exc_info=True)
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['result'] = f'IO error occurred: {e}'
     except Exception as e:
-        logger.error("An unexpected error occurred", exc_info=True)
+        logger.error(f"[{inspect.currentframe().f_code.co_name}] An unexpected error occured: {e}", exc_info=True)
         tasks[task_id]['status'] = 'failed'
         tasks[task_id]['result'] = f'An unexpected error occurred: {e}'
+
+async def whisper_translate(file_path) -> str:
+    logger.info(f"Starting Whisper translation for {file_path}")
+    task_id = str(uuid.uuid4())
+    tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
+    
+    await asyncio.to_thread(task_queue.put, (task_id, file_path))
+    size_adjusted = dict_size_adjust(tasks, logger=logger)
+    if not size_adjusted:
+        logger.error(f"[{inspect.currentframe().f_code.co_name}] Failed to adjust tasks dictionary size", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
+    return task_id
 
 async def task_processor():
     while True:
@@ -84,7 +112,7 @@ async def task_processor():
             tasks[task_id]['status'] = 'running'
             translate_speech(file_path, task_id)
         except Exception as e:
-            logger.error("Error in task processing", exc_info=True)
+            logger.error(f"[{inspect.currentframe().f_code.co_name}] Error in task processing", exc_info=True)
             tasks[task_id]['status'] = 'failed'
             tasks[task_id]['result'] = str(e)
 
@@ -123,14 +151,7 @@ async def translate(file: UploadFile = File(...)):
         
     logger.info(f"Saved uploaded file to {file_path}")
     dir_size_adjust("uploads", logger=logger)
-    task_id = str(uuid.uuid4())
-    tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
-    
-    await asyncio.to_thread(task_queue.put, (task_id, file_path))
-    size_adjusted = dict_size_adjust(tasks, logger=logger)
-    if not size_adjusted:
-        logger.error("Failed to adjust tasks dictionary size", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error, failed to adjust tasks dictionary size")
+    task_id = await whisper_translate(file_path)
 
     return JSONResponse(content={"task_id": task_id}, status_code=202)
 
@@ -206,89 +227,64 @@ async def get_tasks(fields: List[str] = Query(None, description="List of fields 
                 break
         return JSONResponse(content=output)
     
+
+async def ws_translate(audio_chunk, file_name=""):
+    if task_queue.full():
+        raise HTTPException(status_code=429, detail="Queue limit reached")
     
-@app.websocket("/ws/translate")
-async def websocket_translate(websocket: WebSocket, 
-                              seconds: int = Query(20, description="Number of seconds of audio to be processed", example=20)):
-    await websocket.accept()
-    buffer = io.BytesIO()
-    task_id = str(uuid.uuid4())
-    tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
-    logger.info(f"WebSocket connection accepted: Task ID {task_id}")
+    sample_rate = os.getenv("SAMPLE_RATE", "16000")
+    
+    timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
+    if file_name != "":
+        filename = f"upload-{timestamp}-{file_name}"
+        if ".wav" not in filename:
+            filename += ".wav"
+    else:
+        filename = f"upload-{timestamp}.wav"
+    file_path = os.path.join("uploads", filename)
+    bytes_to_wav(audio_chunk, file_path, sample_rate=16000)
+    logger.info(f"Saved uploaded file to {file_path}")
+    dir_size_adjust("uploads", logger=logger)
+    
+    task_id = await whisper_translate(file_path)
+    return task_id
+    
 
-    async def process(buffer, task_id):
-        try:
-            buffer.seek(0)
-            # Process the audio chunk
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-                sf.write(temp_file, buffer.getvalue(), samplerate=16000)
-                translate_speech(temp_file.name, task_id)
-                tasks[task_id]['status'] = 'running'
-                buffer.seek(0)
-                buffer.truncate()
-            logger.info(f"Audio chunk processed: Task ID {task_id}")
-        except Exception as e:
-            logger.error(f"Error in processing audio chunk: Task ID {task_id}", exc_info=True)
-            tasks[task_id]['status'] = 'failed'
-            tasks[task_id]['result'] = str(e)
-            await websocket.send_json({"task_id": task_id, "error": str(e)})  # Send error back
-
-    # if seconds and bytes:
-    #     if(bytes == 16000): 
-    #         bytes_flag = False 
-    #     logger.error("Both 'seconds' and 'bytes' cannot be specified at the same time")
-    #     raise HTTPException(status_code=400, detail="Both 'seconds' and 'bytes' arguments cannot be specified at the same time")
-
+@app.post("/ws/sample_rate")
+async def set_sample_rate(audio_settings: AudioSettings):
     try:
-        while True:
-            audio_chunk = await websocket.receive_bytes()
-            buffer.write(audio_chunk)
-            logger.info(f"Received audio chunk: Task ID {task_id}")
-
-            if seconds and is_chunk_ready(buffer, seconds=seconds):
-                await process(buffer, task_id)
-                await websocket.send_json({"task_id": task_id, "result": tasks[task_id]['result'], "status": "ready_for_next_chunk"})
-                
-            # elif bytes and is_chunk_ready(buffer, byte_mode=True, bytes=bytes):
-            #     await process(buffer, task_id)
-            #     await websocket.send_json({"task_id": task_id, "result": tasks[task_id]['result'], "status": "ready_for_next_chunk"})
-
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected: Task ID {task_id}")
-        buffer.close()
-
+        sample_rate = audio_settings.sample_rate
+        os.environ["SAMPLE_RATE"] = str(sample_rate)
+        logger.info(f"Set sample rate to {sample_rate}")
+        return {"sample_rate": sample_rate}
     except Exception as e:
-        logger.error(f"Unexpected error in WebSocket endpoint: Task ID {task_id}", exc_info=True)
-        buffer.close()
-        raise
-
-    finally:
-        logger.info(f"Closing WebSocket connection: Task ID {task_id}")
-        buffer.close()
+        logger.error(f"[{inspect.currentframe().f_code.co_name}] An unexpected error occurred", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error, failed to set sample rate")
       
        
 @app.websocket("/ws/test")
 async def websocket_test(websocket: WebSocket):
     await websocket.accept()
     logger.info("WebSocket connection accepted")
-
-    task_id = str(uuid.uuid4())
     is_connected = True
 
     try:
         while True:
             audio_chunk = await websocket.receive_bytes()
             logger.info(f"Received audio chunk: {len(audio_chunk)} bytes")
+            
+            task_id = await ws_translate(audio_chunk)
+            
             logger.info(f"Audio chunk processed: Task ID {task_id}")
-            await websocket.send_json({"status": "received", "task_id": task_id})
+            await websocket.send_json({"task_id": task_id, "task": tasks[task_id]})
     except WebSocketDisconnect:
         is_connected = False
         logger.info("WebSocket disconnected due to unknown error")
     except Exception as e:
-        logger.error("Unexpected error in WebSocket endpoint", exc_info=True)
+        logger.error(f"[{inspect.currentframe().f_code.co_name}] Unexpected error in WebSocket endpoint", exc_info=True)
         raise e
     finally:
         if is_connected:
             await websocket.close()
             is_connected = False
-        logger.info("Closing WebSocket connection by user request")
+            logger.info("Closing WebSocket connection by user request")
