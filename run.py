@@ -9,12 +9,18 @@ parser.add_argument("--debug", action="store_true", help="Run the app in debug m
 parser.add_argument("--noreload", action="store_false", help="Reload the app when the code changes.")
 parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to run the app on. If you do not know what to put here, do not include this option.")
 
+# List of environment variables used
+env_vars = []
+
 # Command to be executed
 command = "uvicorn app:app"
 
 # Default port
 os.environ["PORT"] = "8000"
+env_vars.append("PORT")
 os.environ["HOST"] = "127.0.0.1"
+env_vars.append("HOST")
+os.environ["SAMPLE_RATE"] = "16000"
 
 if __name__ == "__main__":
     print(f"Starting the app on {platform.system()}...")
@@ -40,12 +46,29 @@ if __name__ == "__main__":
         command += " --reload"
     if args.debug:
         os.environ["LOG_LEVEL"] = "DEBUG"
+        env_vars.append("LOG_LEVEL")
     if not args.debug:
         os.environ["LOG_LEVEL"] = "INFO"
+        env_vars.append("LOG_LEVEL")
+    
+    
+    # Create necessary folders
+    if not os.path.exists("runs"):
+        os.makedirs("runs")
+    if not os.path.exists("uploads"):
+        os.makedirs("uploads")
     
     # Execute the command
     try:
         subprocess.run(command, shell=True)
     except KeyboardInterrupt:
         print("Stopping the app by user request...")
-        exit()
+        exit(0)
+        
+    finally:
+        # Remove the environment variables
+        for env_var in env_vars:
+            del os.environ[env_var]
+            assert os.environ.get(env_var) is None, f"Failed to remove the environment variable {env_var}"
+        
+        print("Done and cleaned up!")
