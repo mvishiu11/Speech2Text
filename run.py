@@ -21,6 +21,11 @@ env_vars.append("PORT")
 os.environ["HOST"] = "127.0.0.1"
 env_vars.append("HOST")
 os.environ["SAMPLE_RATE"] = "16000"
+env_vars.append("SAMPLE_RATE")
+os.environ["BIT_DEPTH"] = "16"
+env_vars.append("BIT_DEPTH")
+os.environ["CHANNELS"] = "1"
+env_vars.append("CHANNELS")
 
 if __name__ == "__main__":
     print(f"Starting the app on {platform.system()}...")
