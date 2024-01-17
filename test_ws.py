@@ -4,14 +4,19 @@ import asyncio
 import requests
 
 async def test_websocket():
-    data = {"sample_rate": 16000}
+    data = {"sample_rate": 1024}
     
     print("Setting sample rate to 1024...")
-    response = requests.post("http://localhost:8000/ws/sample_rate", json=data)
+    response = requests.post("http://localhost:8000/ws/audio_settings", json=data)
     print("Response:", response)
     if response.status_code == 422:
         print("Failed to set sample rate. Quiting the test...")
         return
+    
+    assert response.status_code == 200
+    assert response.json().get("sample_rate") == data["sample_rate"]
+    assert response.json().get("bit_depth") == os.environ.get("BIT_DEPTH", 16)
+    assert response.json().get("channels") == os.environ.get("CHANNELS", 1)
     
     uri = "ws://localhost:8000/ws/test"
     print(f"Opening a websocket connection to {uri}...")

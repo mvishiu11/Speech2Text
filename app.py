@@ -49,12 +49,15 @@ tasks = {}
 
 # Json with audio settings
 class AudioSettings(BaseModel):
+    """_summary_: JSON object containing the audio settings.
+
+    Extends:
+        BaseModel (BaseModel): Pydantic BaseModel.
+    """
     sample_rate: int = 16000
     bit_depth: int = 16
     channels: int = 1
-    seconds: int = 20
-    byte_mode: bool = False
-    bytes: int = 16000
+
 
 def translate_speech(file_path, task_id):
     """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
@@ -94,6 +97,17 @@ def translate_speech(file_path, task_id):
         tasks[task_id]['result'] = f'An unexpected error occurred: {e}'
 
 async def whisper_translate(file_path) -> str:
+    """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary. Runs in an asyncio event loop.
+
+    Args:
+        file_path (str): Path to the audio file.
+
+    Raises:
+        HTTPException 500: Raised when an unexpected error occurs.
+
+    Returns:
+        str: Unique ID of the task.
+    """
     logger.info(f"Starting Whisper translation for {file_path}")
     task_id = str(uuid.uuid4())
     tasks[task_id] = {'timestamp': datetime.datetime.now().timestamp(), 'status': 'pending', 'result': None}
@@ -106,6 +120,8 @@ async def whisper_translate(file_path) -> str:
     return task_id
 
 async def task_processor():
+    """_summary_: Task processor for translating speech from an audio file to text as soon as it enters the task queue. Runs in an asyncio event loop.
+    """
     while True:
         try:
             task_id, file_path = await asyncio.to_thread(task_queue.get)
@@ -229,6 +245,18 @@ async def get_tasks(fields: List[str] = Query(None, description="List of fields 
     
 
 async def ws_translate(audio_chunk, file_name=""):
+    """_summary_: Translates speech from an audio file to text and stores the result in the tasks dictionary.
+
+    Args:
+        audio_chunk (bytes): Audio file to be translated.
+        file_name (str, optional): Name of the file. Defaults to "".
+
+    Raises:
+        HTTPException 429: Raised when the queue limit is reached.
+
+    Returns:
+        str: Unique ID of the task.
+    """
     if task_queue.full():
         raise HTTPException(status_code=429, detail="Queue limit reached")
     
@@ -250,13 +278,30 @@ async def ws_translate(audio_chunk, file_name=""):
     return task_id
     
 
-@app.post("/ws/sample_rate")
-async def set_sample_rate(audio_settings: AudioSettings):
+@app.post("/ws/audio_settings")
+async def set_audio_settings(audio_settings: AudioSettings):
+    """_summary_: Sets the sample rate for the WebSocket endpoint.
+
+    Args:
+        audio_settings (AudioSettings): JSON object containing the audio settings.
+
+    Raises:
+        HTTPException 500: Raised when an unexpected error occurs.
+
+    Returns:
+        JSON: JSON object containing the sample rate.
+    """
     try:
         sample_rate = audio_settings.sample_rate
+        bit_depth = audio_settings.bit_depth
+        channels = audio_settings.channels
+        
         os.environ["SAMPLE_RATE"] = str(sample_rate)
-        logger.info(f"Set sample rate to {sample_rate}")
-        return {"sample_rate": sample_rate}
+        os.environ["BIT_DEPTH"] = str(bit_depth)
+        os.environ["CHANNELS"] = str(channels)
+        
+        logger.info(f"Audio settings --- Sample rate: {sample_rate} Hz, Bit depth: {bit_depth} bits, Channels: {channels}")
+        return {"sample_rate": sample_rate, "bit_depth": bit_depth, "channels": channels}
     except Exception as e:
         logger.error(f"[{inspect.currentframe().f_code.co_name}] An unexpected error occurred", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error, failed to set sample rate")
@@ -264,6 +309,11 @@ async def set_sample_rate(audio_settings: AudioSettings):
        
 @app.websocket("/ws/test")
 async def websocket_test(websocket: WebSocket):
+    """_summary_: Endpoint for testing the WebSocket connection. Logs requests to the server console.
+
+    Args:
+        websocket (WebSocket): WebSocket connection.
+    """
     await websocket.accept()
     logger.info("WebSocket connection accepted")
     is_connected = True
