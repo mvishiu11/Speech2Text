@@ -23,7 +23,7 @@ def is_chunk_ready(buffer: bytearray,
     """
     if byte_mode:
         required_bytes = bytes
-        return buffer.tell() >= required_bytes
+        return len(buffer) >= required_bytes
     
     if not byte_mode and bytes and bytes != 16000:
         raise ValueError("'bytes' argument is not applicable in non-byte mode")
@@ -38,7 +38,7 @@ def is_chunk_ready(buffer: bytearray,
     bytes_per_second = sample_rate * bytes_per_sample * channels
     required_seconds_bytes = seconds * bytes_per_second
 
-    return buffer.tell() >= required_seconds_bytes
+    return len(buffer) >= required_seconds_bytes
 
 
 def bytes_to_wav(byte_data, output_file, sample_rate=16000, num_channels=1, bit_depth=16):
