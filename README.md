@@ -8,7 +8,7 @@
 - [Requirements and Setup](#requirements-and-setup)
 - [Using the Application](#using-the-application)
 - [Asynchronous Processing](#asynchronous-processing)
-- [Webscoket](#websocket)
+- [Websocket](#websocket)
 - [Dockerization](#dockerization)
 - [Example Usage](#example-usage)
 - [Contributing](#contributing)
@@ -163,15 +163,25 @@ Be warned that the queue is defined locally, so if the application is running on
 
 ## Websocket
 
-The Speech-to-Text API also supports Websocket connections. To use it, send a POST request to the `/translate_ws` endpoint with an audio file in `.wav` format. The file should be included in the request's body as form-data.
+### Connecting to the Websocket
 
-Example of a POST request using curl:
+The Speech-to-Text API also supports Websocket connections. To use it, send a request to the `ws://localhost:8000/ws/test` endpoint with an audio file in `.wav` format. The file should be included in the request's body as form-data.
 
-```bash
-curl -X POST -F "file=@/path/to/audio/file.wav" http://
+Example of a websocket connection using `websockets` package in Python:
+
+```python
+    async with websockets.connect(uri) as websocket:
+        fake_audio_chunk = os.urandom(1024)
+        await websocket.send(fake_audio_chunk)
+        response = await websocket.recv()
 ```
 
-Replace `path_to_audio_file.wav` with the path to your audio file. The return format is JSON, and the response will contain the task ID of the translation task:
+Few things to note here:
+
+- The endpoint (uri) should be set to `ws://localhost:8000/ws/test`.
+- The connection is established using an asynchronous context manager. This is the preffered way of establishing a connection, as it allows for automatic closing of the connection.
+- The audio file is sent as a binary string.
+- The response is a JSON string containing the task ID of the translation task:
 
 ```json
     {
@@ -179,7 +189,29 @@ Replace `path_to_audio_file.wav` with the path to your audio file. The return fo
     }
 ```
 
-This feature is not yet extensively tested and thus is only available in the `experimental` branch. It will be merged into the `main` branch once it is fully tested and stable.
+- The connection is closed automatically after the response is received, thanks to the context manager.
+
+### Checking Translation Status and Retrieving Translation Results
+
+To check the status of a translation, a GET request is sent to the `/status/<task_id>` endpoint, where `<task_id>` is the unique ID returned from the POST request. The response will contain the status of the translation task:
+
+```json
+    {
+    "status": "pending"
+    }
+```
+
+When the status returned is `finished`, the translation results can be retrieved by sending a GET request to the `/result/<task_id>` endpoint, where `<task_id>` is the unique ID returned from the POST request. The response will contain the results of the translation task:
+
+```json
+    {
+    "result": "This is a test."
+    }
+```
+
+A more detailed explanation of possible status values and error handling can be found in the [Asynchronous Processing](#asynchronous-processing) section. For more information about the Websocket implementation, please refer to the [FastAPI documentation](https://fastapi.tiangolo.com/advanced/websockets/).
+
+
 
 
 ## Dockerization
@@ -204,6 +236,18 @@ There is an example provided via the [test.py](test.py) script, which uses the [
 
 ```bash
 python test.py
+```
+
+There are also two additional example files called `test_ws.py` and `test_async.ws` which demonstrate the use of the Websocket connection and asynchronous usage of the API respectively. To run the `test_ws.py`, execute the following command:
+
+```bash
+python test_ws.py
+```
+
+And to run the `test_async.py`, execute the following command:
+
+```bash
+python test_async.py
 ```
 
 ## Contributing
