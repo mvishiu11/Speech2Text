@@ -2,6 +2,9 @@ import os
 import websockets
 import asyncio
 import requests
+import time
+
+BASE_URL = "http://127.0.0.1:" + os.environ.get("PORT", "8000")
 
 async def test_websocket():
     data = {"sample_rate": 1024}
@@ -28,7 +31,40 @@ async def test_websocket():
 
             try:
                 response = await websocket.recv()
-                print(f"Received response: {response}")
+                print(f"Received response: {response}, type: {type(response)}")
+                task_id = response
+                
+                while True:
+                    response = requests.get(f"{BASE_URL}/status/{task_id}")
+                    if response.json()["status"] == "finished":
+                        break
+                    elif response.json()["status"] == "failed":
+                        print(f"Failed to translate file. Error: {response.json()['result']}")
+                        return
+                    time.sleep(1)
+                get_response = requests.get(f"{BASE_URL}/result/{task_id}")
+                text = get_response.json()["text"]
+                print("Text: " + text)
+                
+                with open('examples\example_eng_1.wav', 'rb') as file:
+                    wav_bytes = file.read()
+                    
+                response = await websocket.send(wav_bytes)
+                print(f"Sent chunk {i+2}")
+                wav_response = await websocket.recv()
+                task_id = wav_response
+                
+                while True:
+                    response = requests.get(f"{BASE_URL}/status/{task_id}")
+                    if response.json()["status"] == "finished":
+                        break
+                    elif response.json()["status"] == "failed":
+                        print(f"Failed to translate file. Error: {response.json()['result']}")
+                        return
+                    time.sleep(1)
+                get_response = requests.get(f"{BASE_URL}/result/{task_id}")
+                text = get_response.json()["text"]
+                print("Text: " + text)
             except websockets.exceptions.ConnectionClosed as e:
                 print(f"Connection closed: {e}")
                 break

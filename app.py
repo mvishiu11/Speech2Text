@@ -326,7 +326,7 @@ async def websocket_test(websocket: WebSocket):
             task_id = await ws_translate(audio_chunk)
             
             logger.info(f"Audio chunk processed: Task ID {task_id}")
-            await websocket.send_json({"task_id": task_id, "task": tasks[task_id]})
+            res = await websocket.send_text(task_id)
     except WebSocketDisconnect:
         is_connected = False
         logger.info("WebSocket disconnected due to unknown error")
