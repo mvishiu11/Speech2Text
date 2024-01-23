@@ -29,7 +29,7 @@ def test_translation(file_path):
     while True:
         response = requests.get(f"{BASE_URL}/status/{task_id}")
         status = response.json()["status"]
-        assert status != "failed", f"Failed to translate file. Error: {response.json()['result']}"
+        assert status != "failed", f"Failed to translate file. Error: {response.json()}"
         if status == "finished":
             break
         time.sleep(1)
