@@ -260,7 +260,9 @@ async def ws_translate(audio_chunk, file_name=""):
     if task_queue.full():
         raise HTTPException(status_code=429, detail="Queue limit reached")
     
-    sample_rate = os.getenv("SAMPLE_RATE", "16000")
+    sample_rate = int(os.getenv("SAMPLE_RATE", "16000"))
+    bit_depth = int(os.getenv("BIT_DEPTH", "16"))
+    channels = int(os.getenv("CHANNELS", "1"))
     
     timestamp = datetime.datetime.now().strftime("%Y_%m_%d_%H_%M")
     if file_name != "":
@@ -270,7 +272,8 @@ async def ws_translate(audio_chunk, file_name=""):
     else:
         filename = f"upload-{timestamp}.wav"
     file_path = os.path.join("uploads", filename)
-    bytes_to_wav(audio_chunk, file_path, sample_rate=16000)
+    
+    bytes_to_wav(audio_chunk, file_path, sample_rate=sample_rate, num_channels=channels, bit_depth=bit_depth)
     logger.info(f"Saved uploaded file to {file_path}")
     dir_size_adjust("uploads", logger=logger)
     
