@@ -7,68 +7,54 @@ import time
 BASE_URL = "http://127.0.0.1:" + os.environ.get("PORT", "8000")
 
 async def test_websocket():
-    data = {"sample_rate": 1024}
+    audio_settings = {"sample_rate": 45000,
+            "bit_depth": 16,
+            "channels": 1}
     
-    print("Setting sample rate to 1024...")
-    response = requests.post("http://localhost:8000/ws/audio_settings", json=data)
+    print(f"Setting sample rate to {audio_settings['sample_rate']}...")
+    response = requests.post("http://localhost:8000/ws/audio_settings", json=audio_settings)
     print("Response:", response)
     if response.status_code == 422:
         print("Failed to set sample rate. Quiting the test...")
         return
     
     assert response.status_code == 200
-    assert response.json().get("sample_rate") == data["sample_rate"]
-    assert response.json().get("bit_depth") == os.environ.get("BIT_DEPTH", 16)
-    assert response.json().get("channels") == os.environ.get("CHANNELS", 1)
+    assert response.json().get("sample_rate") == audio_settings["sample_rate"]
+    assert response.json().get("bit_depth") == audio_settings["bit_depth"]
+    assert response.json().get("channels") == audio_settings["channels"]
     
     uri = "ws://localhost:8000/ws/test"
     print(f"Opening a websocket connection to {uri}...")
     async with websockets.connect(uri) as websocket:
-        for i in range(1):
-            fake_audio_chunk = os.urandom(1024)
-            response = await websocket.send(fake_audio_chunk)
-            print(f"Sent chunk {i+1}")
-
             try:
-                response = await websocket.recv()
-                print(f"Received response: {response}, type: {type(response)}")
-                task_id = response
-                
-                while True:
-                    response = requests.get(f"{BASE_URL}/status/{task_id}")
-                    if response.json()["status"] == "finished":
-                        break
-                    elif response.json()["status"] == "failed":
-                        print(f"Failed to translate file. Error: {response.json()['result']}")
-                        return
-                    time.sleep(1)
-                get_response = requests.get(f"{BASE_URL}/result/{task_id}")
-                text = get_response.json()["text"]
-                print("Text: " + text)
-                
                 with open('examples\example_eng_1.wav', 'rb') as file:
+                    print("Reading file...")
                     wav_bytes = file.read()
                     
                 response = await websocket.send(wav_bytes)
-                print(f"Sent chunk {i+2}")
+                print(f"Sent chunk {2}, response: {response}")
                 wav_response = await websocket.recv()
+                print(f"Received response: {wav_response}")
                 task_id = wav_response
                 
                 while True:
                     response = requests.get(f"{BASE_URL}/status/{task_id}")
+                    print(response.json())
                     if response.json()["status"] == "finished":
                         break
                     elif response.json()["status"] == "failed":
-                        print(f"Failed to translate file. Error: {response.json()['result']}")
+                        get_response = requests.get(f"{BASE_URL}/result/{task_id}")
+                        print(f"Failed to translate file. Error: {get_response.json()['error']}")
                         return
                     time.sleep(1)
+                print("Translation completed.")
                 get_response = requests.get(f"{BASE_URL}/result/{task_id}")
+                print(get_response.json())
                 text = get_response.json()["text"]
                 print("Text: " + text)
             except websockets.exceptions.ConnectionClosed as e:
                 print(f"Connection closed: {e}")
-                break
 
-        print("Test completed.")
+            print("Test completed.")
         
 asyncio.run(test_websocket())
