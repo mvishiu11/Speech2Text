@@ -2,7 +2,7 @@ import subprocess
 import platform
 import argparse
 import os
-from utils import install_ffmpeg
+from utils.ffmpeg import install_ffmpeg_windows, install_ffmpeg_linux, install_ffmpeg_macos
 import sys
 
 parser = argparse.ArgumentParser(description="Run the app.")
@@ -34,11 +34,11 @@ if __name__ == "__main__":
     
     os_type = platform.system()
     if os_type == 'Windows':
-        install_ffmpeg.install_ffmpeg_windows()
+        install_ffmpeg_windows(supress_output=True)
     elif os_type == 'Linux':
-        install_ffmpeg.install_ffmpeg_linux()
+        install_ffmpeg_linux(supress_output=True)
     elif os_type == 'Darwin':  # macOS
-        install_ffmpeg.install_ffmpeg_macos()
+        install_ffmpeg_macos(supress_output=True)
     else:
         print(f"Unsupported operating system: {os_type}")
         sys.exit(1)
