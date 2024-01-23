@@ -24,13 +24,17 @@ def test_translation(file_path):
     assert response.status_code != 400, "No file part."
     assert 200 <= response.status_code < 300, f"Failed to submit file for translation. Status Code: {response.status_code}, Response: {response}"
 
-    # Step 2: Get a result of the translation using a GET requests to the /status and /result endpoints
+    # Step 2: Get a result of the translation using GET requests to the /status and /result endpoints
     task_id = response.json()["task_id"]
     while True:
         response = requests.get(f"{BASE_URL}/status/{task_id}")
-        status = response.json()["status"]
-        assert status != "failed", f"Failed to translate file. Error: {response.json()}"
-        if status == "finished":
+        status_response = response.json()
+        status = status_response["status"]
+        if status == "failed":
+            # Provide more information if available
+            error_info = status_response.get('error_info', 'No additional error info provided.')
+            assert False, f"Failed to translate file. Status: {status}, Error info: {error_info}"
+        elif status == "finished":
             break
         time.sleep(1)
     

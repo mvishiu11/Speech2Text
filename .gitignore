@@ -13,3 +13,12 @@ __pycache__/
 
 # Ignore vscode settings
 .vscode/
+
+# Ignore github workflows
+.github/
+
+# Ignore pytest cache
+.pytest_cache/
+
+# Ignore gitignore
+.gitignore
