@@ -2,6 +2,8 @@ import subprocess
 import platform
 import argparse
 import os
+from utils import install_ffmpeg
+import sys
 
 parser = argparse.ArgumentParser(description="Run the app.")
 parser.add_argument("--port", type=int, default=8000, help="Port to run the app on.")
@@ -29,6 +31,17 @@ env_vars.append("CHANNELS")
 
 if __name__ == "__main__":
     print(f"Starting the app on {platform.system()}...")
+    
+    os_type = platform.system()
+    if os_type == 'Windows':
+        install_ffmpeg.install_ffmpeg_windows()
+    elif os_type == 'Linux':
+        install_ffmpeg.install_ffmpeg_linux()
+    elif os_type == 'Darwin':  # macOS
+        install_ffmpeg.install_ffmpeg_macos()
+    else:
+        print(f"Unsupported operating system: {os_type}")
+        sys.exit(1)
     
     # Parse the arguments
     args = parser.parse_args()
