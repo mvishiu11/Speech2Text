@@ -32,12 +32,19 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Start Server
       run: |
-        python run.py &
-        sleep 10  # Give the server time to start
+        python run.py > server.log 2>&1 &
+        echo $! > pidfile &
+        sleep 5  # Give the server time to start
     - name: Test with pytest
       run: |
         pytest testing/
+    - name: Upload server log
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: server-logs
+        path: server.log
     - name: Shutdown Server
       if: always()
       run: |
-        kill $!  # Kills the last background command
+        kill $(cat pidfile) || true
