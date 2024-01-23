@@ -33,11 +33,12 @@ jobs:
     - name: Start Server
       run: |
         python run.py &
-        sleep 10  # Give the server time to start
+        echo $! > pidfile &
+        sleep 5  # Give the server time to start
     - name: Test with pytest
       run: |
         pytest testing/
     - name: Shutdown Server
       if: always()
       run: |
-        kill $!  # Kills the last background command
+        kill $(cat pidfile) || true
